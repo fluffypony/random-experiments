@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Drifting Donut</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #1a1a2e; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+    <div id="info">F1 Drifting Donut 🏎️</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, car, wheels = [], smokeParticles = [];
+        let angle = 0;
+        const driftRadius = 8;
+        const driftSpeed = 0.02;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x1a1a2e, 30, 80);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(20, 15, 20);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambient);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+            mainLight.position.set(20, 30, 20);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.camera.near = 0.5;
+            mainLight.shadow.camera.far = 100;
+            mainLight.shadow.camera.left = -30;
+            mainLight.shadow.camera.right = 30;
+            mainLight.shadow.camera.top = 30;
+            mainLight.shadow.camera.bottom = -30;
+            scene.add(mainLight);
+
+            const streetLight1 = new THREE.PointLight(0xffaa00, 1, 30);
+            streetLight1.position.set(-15, 10, -15);
+            scene.add(streetLight1);
+
+            const streetLight2 = new THREE.PointLight(0xffaa00, 1, 30);
+            streetLight2.position.set(15, 10, 15);
+            scene.add(streetLight2);
+
+            createStreet();
+            createBuildings();
+            createF1Car();
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function createStreet() {
+            // Main road
+            const roadGeom = new THREE.PlaneGeometry(60, 60);
+            const roadMat = new THREE.MeshStandardMaterial({ 
+                color: 0x2a2a2a,
+                roughness: 0.9
+            });
+            const road = new THREE.Mesh(roadGeom, roadMat);
+            road.rotation.x = -Math.PI / 2;
+            road.receiveShadow = true;
+            scene.add(road);
+
+            // Tire marks (donut shape)
+            const donutGeom = new THREE.RingGeometry(driftRadius - 1.5, driftRadius + 1.5, 64);
+            const donutMat = new THREE.MeshBasicMaterial({ 
+                color: 0x1a1a1a,
+                transparent: true,
+                opacity: 0.7
+            });
+            const donut = new THREE.Mesh(donutGeom, donutMat);
+            donut.rotation.x = -Math.PI / 2;
+            donut.position.y = 0.01;
+            scene.add(donut);
+
+            // Road markings
+            const lineGeom = new THREE.PlaneGeometry(0.3, 60);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+            for (let i = -1; i <= 1; i += 2) {
+                const line = new THREE.Mesh(lineGeom, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.set(i * 25, 0.02, 0);
+                scene.add(line);
+            }
+        }
+
+        function createBuildings() {
+            const buildingColors = [0x3a3a5a, 0x4a4a6a, 0x5a5a7a, 0x2a2a4a];
+            
+            for (let i = 0; i < 12; i++) {
+                const width = 5 + Math.random() * 5;
+                const height = 10 + Math.random() * 20;
+                const depth = 5 + Math.random() * 5;
+                
+                const geom = new THREE.BoxGeometry(width, height, depth);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: buildingColors[Math.floor(Math.random() * buildingColors.length)]
+                });
+                const building = new THREE.Mesh(geom, mat);
+                
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 35 + Math.random() * 10;
+                building.position.set(
+                    Math.cos(angle) * radius,
+                    height / 2,
+                    Math.sin(angle) * radius
+                );
+                building.castShadow = true;
+                building.receiveShadow = true;
+                scene.add(building);
+
+                // Windows
+                for (let y = 2; y < height - 2; y += 3) {
+                    for (let x = -width/3; x <= width/3; x += width/3) {
+                        const windowGeom = new THREE.PlaneGeometry(1, 1.5);
+                        const windowMat = new THREE.MeshBasicMaterial({
+                            color: Math.random() > 0.3 ? 0xffffaa : 0x333333
+                        });
+                        const window = new THREE.Mesh(windowGeom, windowMat);
+                        window.position.set(
+                            building.position.x + x * Math.cos(angle),
+                            y,
+                            building.position.z + x * Math.sin(angle)
+                        );
+                        window.lookAt(0, y, 0);
+                        scene.add(window);
+                    }
+                }
+            }
+        }
+
+        function createF1Car() {
+            car = new THREE.Group();
+
+            // Main body
+            const bodyGeom = new THREE.BoxGeometry(1.2, 0.4, 3.5);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            body.position.y = 0.35;
+            body.castShadow = true;
+            car.add(body);
+
+            // Nose cone
+            const noseGeom = new THREE.ConeGeometry(0.4, 1.5, 4);
+            const nose = new THREE.Mesh(noseGeom, bodyMat);
+            nose.rotation.x = Math.PI / 2;
+            nose.position.set(0, 0.35, 2.5);
+            nose.castShadow = true;
+            car.add(nose);
+
+            // Cockpit
+            const cockpitGeom = new THREE.BoxGeometry(0.6, 0.35, 1);
+            const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const cockpit = new THREE.Mesh(cockpitGeom, cockpitMat);
+            cockpit.position.set(0, 0.55, 0.3);
+            car.add(cockpit);
+
+            // Halo
+            const haloGeom = new THREE.TorusGeometry(0.35, 0.03, 8, 16, Math.PI);
+            const haloMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9 });
+            const halo = new THREE.Mesh(haloGeom, haloMat);
+            halo.rotation.x = Math.PI / 2;
+            halo.rotation.z = Math.PI;
+            halo.position.set(0, 0.7, 0.5);
+            car.add(halo);
+
+            // Rear wing
+            const wingGeom = new THREE.BoxGeometry(1.8, 0.05, 0.4);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const wing = new THREE.Mesh(wingGeom, wingMat);
+            wing.position.set(0, 0.9, -1.5);
+            wing.castShadow = true;
+            car.add(wing);
+
+            // Wing supports
+            for (let x of [-0.6, 0.6]) {
+                const supportGeom = new THREE.BoxGeometry(0.05, 0.5, 0.05);
+                const support = new THREE.Mesh(supportGeom, wingMat);
+                support.position.set(x, 0.65, -1.5);
+                car.add(support);
+            }
+
+            // Front wing
+            const frontWingGeom = new THREE.BoxGeometry(1.6, 0.03, 0.3);
+            const frontWing = new THREE.Mesh(frontWingGeom, wingMat);
+            frontWing.position.set(0, 0.15, 2.8);
+            car.add(frontWing);
+
+            // Wheels
+            const wheelGeom = new THREE.CylinderGeometry(0.3, 0.3, 0.25, 16);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+            const wheelPositions = [
+                [-0.7, 0.3, 1.2], [0.7, 0.3, 1.2],
+                [-0.7, 0.3, -1.2], [0.7, 0.3, -1.2]
+            ];
+
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(...pos);
+                wheel.castShadow = true;
+                wheels.push(wheel);
+                car.add(wheel);
+            });
+
+            car.position.y = 0.1;
+            scene.add(car);
+        }
+
+        function createSmoke() {
+            const smokeGeom = new THREE.SphereGeometry(0.3, 8, 8);
+            const smokeMat = new THREE.MeshBasicMaterial({
+                color: 0x888888,
+                transparent: true,
+                opacity: 0.6
+            });
+            const smoke = new THREE.Mesh(smokeGeom, smokeMat);
+            
+            // Position at rear wheels
+            const carPos = car.position.clone();
+            smoke.position.set(
+                carPos.x + (Math.random() - 0.5) * 1.5,
+                0.2,
+                carPos.z + (Math.random() - 0.5) * 1.5
+            );
+            
+            smoke.userData = {
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.1,
+                    0.05 + Math.random() * 0.05,
+                    (Math.random() - 0.5) * 0.1
+                ),
+                life: 1.0
+            };
+            
+            scene.add(smoke);
+            smokeParticles.push(smoke);
+        }
+
+        function updateSmoke() {
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                const smoke = smokeParticles[i];
+                smoke.position.add(smoke.userData.velocity);
+                smoke.userData.life -= 0.02;
+                smoke.material.opacity = smoke.userData.life * 0.6;
+                smoke.scale.multiplyScalar(1.02);
+                
+                if (smoke.userData.life <= 0) {
+                    scene.remove(smoke);
+                    smokeParticles.splice(i, 1);
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            angle += driftSpeed;
+
+            // Car position on drift circle
+            car.position.x = Math.cos(angle) * driftRadius;
+            car.position.z = Math.sin(angle) * driftRadius;
+
+            // Car facing direction (tangent + drift angle)
+            const tangentAngle = angle + Math.PI / 2;
+            const driftAngle = 0.4; // Drift offset
+            car.rotation.y = -(tangentAngle + driftAngle);
+
+            // Spin wheels
+            wheels.forEach(wheel => {
+                wheel.rotation.x += 0.3;
+            });
+
+            // Create smoke particles
+            if (Math.random() > 0.5) {
+                createSmoke();
+            }
+            updateSmoke();
+
+            // Camera follows loosely
+            const camAngle = angle - 0.5;
+            camera.position.x = Math.cos(camAngle) * 25;
+            camera.position.z = Math.sin(camAngle) * 25;
+            camera.position.y = 12;
+            camera.lookAt(car.position.x, 1, car.position.z);
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
